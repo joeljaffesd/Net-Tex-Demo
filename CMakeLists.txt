@@ -37,5 +37,14 @@ target_link_libraries(${APP_NAME} PRIVATE al)
 add_subdirectory(videoPipe/ndi_wrapping)
 target_link_libraries(${APP_NAME} PRIVATE al_ndi)
 
+# Add include directories for the main executable
+target_include_directories(${APP_NAME} PRIVATE
+    allolib/include
+    allolib/external/glad/include
+    allolib/external/Gamma
+    videoPipe/ndi_wrapping/include
+    ${CMAKE_CURRENT_LIST_DIR}/ndi/NDI SDK for Apple/include
+)
+
 # Suppress warnings for now
 target_compile_options(${APP_NAME} PRIVATE -w)
