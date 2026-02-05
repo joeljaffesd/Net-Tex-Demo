@@ -20,6 +20,8 @@
 
 #include "al/app/al_DistributedApp.hpp"
 #include "al/graphics/al_Shapes.hpp"
+#include "al/graphics/al_Image.hpp"
+#include "al/io/al_File.hpp"
 
 // Define a basic state structure to demonstrate distributed functionality
 struct SharedState {
@@ -30,6 +32,7 @@ struct SharedState {
 
 struct MyApp: public al::DistributedAppWithState<SharedState> {
   al::VAOMesh mesh;
+  al::Texture texture;
 
   void onInit() override { // Called on app start
     std::cout << "onInit() - " << (isPrimary() ? "Primary" : "Replica") << " instance" << std::endl;
@@ -40,6 +43,19 @@ struct MyApp: public al::DistributedAppWithState<SharedState> {
     // Create a simple quad mesh
     al::addQuad(mesh, 0.6f, 0.6f);
     mesh.update();
+
+    // Load image for texture display
+    const std::string filename = al::File::currentPath() + "../allolib/examples/graphics/bin/data/hubble.jpg";
+    auto imageData = al::Image(filename);
+
+    if (imageData.array().size() == 0) {
+      std::cout << "Failed to load image " << filename << std::endl;
+    } else {
+      std::cout << "Loaded image size: " << imageData.width() << ", " << imageData.height() << std::endl;
+      texture.create2D(imageData.width(), imageData.height());
+      texture.submit(imageData.array().data(), GL_RGBA, GL_UNSIGNED_BYTE);
+      texture.filter(al::Texture::LINEAR);
+    }
   }
 
   void onAnimate(double dt) override { // Called once before drawing
@@ -64,6 +80,14 @@ struct MyApp: public al::DistributedAppWithState<SharedState> {
     g.color(1.0f - state().color, 0.5f, state().color);
     g.draw(mesh);
     g.popMatrix();
+    
+    // Display texture only on primary instance
+    if (isPrimary()) {
+      g.pushMatrix();
+      g.translate(0, 0, -5);
+      g.quad(texture, -1, -1, 2, 2);
+      g.popMatrix();
+    }
     
     // Display instance type and frame count
     std::string info = isPrimary() ? "PRIMARY - Frame: " : "REPLICA - Frame: ";
