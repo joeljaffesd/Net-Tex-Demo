@@ -3,8 +3,6 @@
 #include <string>
 #include "al/app/al_App.hpp"
 #include "al/graphics/al_Shapes.hpp"
-#include "al/ui/al_Parameter.hpp"
-#include "al/ui/al_ParameterGUI.hpp"
 #include "al_ext/ndi/al_NDIReceiver.hpp"
 
 using namespace al;
@@ -18,10 +16,7 @@ struct NDIVideoReceiverApp : public App {
     bool connected = false;
     string statusMessage = "Initializing...";
 
-    // UI parameters - simplified for now
-    // ParameterMenu sourceMenu{"NDI Source", "", 0};
-    // ParameterBool connectButton{"Connect", "", false};
-    // ParameterBool disconnectButton{"Disconnect", "", false};
+
 
     void onCreate() override {
         // Initialize NDI
@@ -38,17 +33,11 @@ struct NDIVideoReceiverApp : public App {
         // Get available sources
         refreshSources();
 
-        // Setup UI parameters - simplified for now
-        // TODO: Add proper GUI integration later
-
-        statusMessage = "Ready - Select NDI source and click Connect";
+        statusMessage = "Ready - Use keyboard controls to select and connect to NDI source";
     }
 
     void onDraw(Graphics& g) override {
         g.clear(0.1, 0.1, 0.1);
-
-        // Handle connection/disconnection - simplified for keyboard only
-        // TODO: Add GUI controls later
 
         // Try to receive frames - update texture if new frame available
         bool frameReceived = false;
@@ -65,18 +54,23 @@ struct NDIVideoReceiverApp : public App {
             g.pushMatrix();
             g.translate(0, 0, -4);
 
+            // NDI frames are stored upside down, flip vertically
+            g.scale(1, -1, 1);
+
             // Calculate aspect ratio to fit screen
             float screenAspect = width() / (float)height();
             float textureAspect = receivedTexture.width() / (float)receivedTexture.height();
 
             if (textureAspect > screenAspect) {
                 // Texture is wider, fit to width
-                float scale = 2.0f / textureAspect;
-                g.scale(textureAspect * scale, scale, 1);
+                float scaleX = 2.0f;
+                float scaleY = 2.0f / textureAspect;
+                g.scale(scaleX, scaleY, 1);
             } else {
                 // Texture is taller, fit to height
-                float scale = 2.0f / textureAspect;
-                g.scale(scale, textureAspect * scale, 1);
+                float scaleX = 2.0f * textureAspect;
+                float scaleY = 2.0f;
+                g.scale(scaleX, scaleY, 1);
             }
 
             g.quad(receivedTexture, -1, -1, 2, 2);
@@ -90,24 +84,16 @@ struct NDIVideoReceiverApp : public App {
                               to_string(receivedTexture.height());
             }
         }
-
-        // Draw UI
-        drawUI(g);
-    }
-
-    void drawUI(Graphics& g) {
-        // Simplified UI - just show status in console for now
-        // TODO: Add proper text rendering later
     }
 
     bool onKeyDown(Keyboard const& k) override {
         if (k.key() == 'r' || k.key() == 'R') {
             refreshSources();
-        } else if (k.key() == 'c' || k.key() == 'C') {
+        } else if (k.key() == 'y' || k.key() == 'Y') {
             if (!connected) {
                 connectToSelectedSource();
             }
-        } else if (k.key() == 'd' || k.key() == 'D') {
+        } else if (k.key() == 'n' || k.key() == 'N') {
             if (connected) {
                 disconnectFromSource();
             }
@@ -177,15 +163,15 @@ struct NDIVideoReceiverApp : public App {
 
 int main() {
     NDIVideoReceiverApp app;
-    app.dimensions(1280, 720);
+    app.dimensions(0, 0, 1280, 720);
 
     // Add some instructions
     cout << "NDI Video Receiver Controls:" << endl;
-    cout << "  R - Refresh available sources" << endl;
-    cout << "  C - Connect to selected source" << endl;
-    cout << "  D - Disconnect" << endl;
-    cout << "  1-9 - Select source by number" << endl;
-    cout << "  Or use the GUI controls" << endl;
+    cout << "  Keyboard shortcuts:" << endl;
+    cout << "    R - Refresh available sources" << endl;
+    cout << "    Y - Yes Connect to selected source" << endl;
+    cout << "    N - No, Disconnect" << endl;
+    cout << "    1-9 - Select source by number" << endl;
     cout << endl;
 
     app.start();
