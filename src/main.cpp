@@ -36,14 +36,16 @@ struct SharedState {
   bool textureLoaded = false;
   int textureWidth = 512;
   int textureHeight = 512;
-
+  unsigned char textureData[2048 * 2048 * 4]; // Larger buffer for various video resolutions
 };
 
 struct MyApp: public al::DistributedAppWithState<SharedState> {
   al::VAOMesh mesh;
-  al::Texture renderTexture;  // For primary to receive NDI video
+  al::Texture renderTexture;  // For displaying NDI video
   al::RBO rbo;                // Render buffer for depth
   al::FBO fbo;                // Frame buffer object for offscreen rendering
+  al::Texture displayTexture; // For secondaries to display received texture
+  bool displayTextureCreated = false;
   al::NDIReceiver ndiReceiver; // NDI receiver for primary
   std::shared_ptr<al::CuttleboneStateSimulationDomain<SharedState, 8000>> cuttleboneDomain;
 
@@ -101,15 +103,26 @@ struct MyApp: public al::DistributedAppWithState<SharedState> {
       state().frameCount++;
       state().time += dt; // Update time for animation
       
-      // Update shader parameters
+      // Update shader parameters (kept for compatibility)
       state().onset = sin(state().time * 0.5f) * 0.5f + 0.5f;
       state().cent = cos(state().time * 0.3f) * 0.5f + 0.5f;
       state().flux = sin(state().time * 0.7f) * 0.5f + 0.5f;
 
       // Update texture with NDI video
       if (ndiReceiver.update(renderTexture)) {
+        // Update state dimensions to match the texture
+        state().textureWidth = renderTexture.width();
+        state().textureHeight = renderTexture.height();
+        
+        // Read texture data from GPU to CPU for transmission
+        renderTexture.bind();
+        glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_UNSIGNED_BYTE, state().textureData);
+        renderTexture.unbind();
+        
         state().textureLoaded = true;
-        std::cout << "Primary received NDI frame " << state().frameCount << " to texture" << std::endl;
+        std::cout << "Primary received NDI frame " << state().frameCount << " (" 
+                  << state().textureWidth << "x" << state().textureHeight 
+                  << ") and prepared for transmission" << std::endl;
       }
     }
     // Replicas automatically receive the updated state
@@ -125,10 +138,25 @@ struct MyApp: public al::DistributedAppWithState<SharedState> {
     g.draw(mesh);
     g.popMatrix();
     
-    // Display NDI texture on primary
-    if (isPrimary() && state().textureLoaded) {
-      // Draw texture in screen space using quadViewport
-      g.quadViewport(renderTexture, -0.9, -0.9, 1.8, 1.8);
+    // Display texture if available
+    if (state().textureLoaded) {
+      // For primary: display the local renderTexture
+      if (cuttleboneDomain->isSender()) {
+        g.quadViewport(renderTexture, -0.9, -0.9, 1.8, 1.8);
+      } else {
+        // For secondaries: display texture from received state data
+        // Recreate texture if dimensions changed
+        if (!displayTextureCreated || 
+            displayTexture.width() != state().textureWidth || 
+            displayTexture.height() != state().textureHeight) {
+          displayTexture.create2D(state().textureWidth, state().textureHeight);
+          displayTextureCreated = true;
+          std::cout << "Secondary display texture created/resized to " 
+                    << state().textureWidth << "x" << state().textureHeight << std::endl;
+        }
+        displayTexture.submit(state().textureData, GL_RGBA, GL_UNSIGNED_BYTE);
+        g.quadViewport(displayTexture, -0.9, -0.9, 1.8, 1.8);
+      }
     }
     
     // Display instance type and frame count
