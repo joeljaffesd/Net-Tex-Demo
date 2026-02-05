@@ -1,10 +1,10 @@
 # NDI Video Receiver AlloApp - Planning Notes
 
 ## Current Status
-- ✅ NDI SDK integrated with allolib
-- ✅ NDI sender working (NDISimpleTest, NDISimpleApp)
-- ✅ NDI receiver class implemented (al_NDIReceiver)
-- ✅ Basic receiver test app exists (NDIReceiveTest.cpp)
+- [x] NDI SDK integrated with allolib
+- [x] NDI sender working (NDISimpleTest, NDISimpleApp)
+- [x] NDI receiver class implemented (al_NDIReceiver)
+- [x] Basic receiver test app exists (NDIReceiveTest.cpp)
 
 ## Goal
 Build an alloApp that receives NDI video frames with the ability to select a video path (NDI source) and display the received frames.

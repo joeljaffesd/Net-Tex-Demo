@@ -1,17 +1,18 @@
 # NDI Extension Notes
 
 ## Overview
-This extension provides NDI (Network Device Interface) support for allolib, enabling real-time video streaming over network connections.
+This extension provides complete NDI (Network Device Interface) support for allolib, enabling real-time video streaming over network connections. Includes both sending and receiving capabilities.
 
 ## Architecture
-- **NDISender**: Sends video frames over NDI network streams
-- **NDIReceiver**: Receives video frames from NDI network streams (not yet implemented)
+- **NDISender**: Sends video frames over NDI network streams (WORKING)
+- **NDIReceiver**: Receives video frames from NDI network streams (WORKING)
 
 ## Key Components
 - Uses NDI SDK for Apple (macOS)
 - Integrates with allolib's graphics pipeline
-- Supports OpenGL texture input
-- Software-based sending (no hardware acceleration on macOS)
+- Supports OpenGL texture input/output
+- Software-based sending with GPU↔CPU transfer
+- Dynamic source discovery and selection
 
 ## Critical Bug Fix (Feb 2026)
 ### Problem
@@ -41,13 +42,109 @@ mHardwareCtx.videoFrame.p_data = mHardwareCtx.pPixelData;
 - Added `glReadPixels()` call in `sendDirect()` to transfer GPU→CPU
 - Updated `HardwareContext` struct to include `uint8_t* pPixelData`
 
-## Performance Considerations
-- Current implementation uses software sending with GPU→CPU transfer
-- Each frame requires a full texture readback (~4MB for 1024x1024 RGBA)
-- Suitable for moderate resolutions and frame rates
-- Hardware acceleration not available on macOS OpenGL
+## Receiver Implementation (Feb 2026)
 
-## Usage Example
+### Features
+- **Dynamic Source Discovery**: Automatically finds available NDI streams on network
+- **Source Selection**: Connect to specific streams by name
+- **Texture Integration**: Direct rendering to allolib Texture objects
+- **Automatic Resizing**: Adapts to incoming video dimensions
+- **Color Space Handling**: BGRA→RGBA conversion for OpenGL
+
+### Usage
+```cpp
+NDIReceiver receiver;
+receiver.init();
+
+// Discover sources
+auto sources = receiver.getAvailableSources();
+
+// Connect to specific source
+receiver.connect("MyNDIStream");
+
+// Receive frames
+Texture tex;
+if (receiver.update(tex)) {
+    // Render texture to screen
+    g.quad(tex, -1, -1, 2, 2);
+}
+```
+
+## Performance Considerations
+- **Sender**: GPU→CPU transfer (~4MB/frame for 1024×768 RGBA)
+- **Receiver**: Minimal CPU overhead, efficient GPU texture uploads
+- **Network**: Uncompressed video, optimized for local networks
+- **Hardware Acceleration**: Not available on macOS OpenGL (software path)
+
+## Working Applications
+
+### Sender Applications
+```cpp
+// Console test
+NDISimpleTest  // Basic functionality verification
+
+// GUI app with animated patterns
+NDISimpleApp   // Visual sender testing
+```
+
+### Receiver Applications
+```cpp
+// Basic receiver (auto-connect)
+NDIReceiveTest // Simple fullscreen display
+
+// Advanced receiver with source selection
+NDIVideoReceiverApp // Keyboard-controlled source selection
+```
+
+## Build Configuration
+- Requires NDI SDK path in root CMakeLists.txt
+- Links with NDI libraries and allolib graphics
+- Include paths must cover allolib external dependencies
+- C++14 standard required
+
+## Testing and Validation
+
+### Test Setup
+1. Run sender application (e.g., `./NDISimpleTest`)
+2. Run receiver application (e.g., `./NDIVideoReceiverApp`)
+3. Use NDI Studio Monitor to verify streams
+4. Test source selection and connection management
+
+### NDI Monitoring Tools
+- **NDI Studio Monitor**: Official monitoring application
+- **NDI Tools**: Free suite with monitoring capabilities
+- **SDK Examples**: Basic receiver examples for testing
+
+### Network Requirements
+- Local network connectivity
+- Firewall configuration for NDI ports
+- Wired Ethernet recommended for best performance
+
+## Future Improvements
+- [x] Implement NDIReceiver for receiving streams (COMPLETED)
+- [ ] Add audio support alongside video
+- [ ] Optimize memory transfers (PBOs, async transfers)
+- [ ] Add compression options
+- [ ] Support for multiple simultaneous streams
+- [ ] GUI parameter controls for receiver
+- [ ] Hardware-accelerated receiving
+
+## File Organization
+```
+videoPipe/
+├── DEVELOPER.md              # Complete developer documentation
+├── NDI-Notes.md              # Technical implementation notes
+├── planning.md               # Development planning
+├── NDISimpleTest.cpp         # Console sender test
+├── NDISimpleApp.cpp          # GUI sender app
+├── NDIVideoReceiverApp.cpp   # GUI receiver with source selection
+└── ndi_wrapping/
+    ├── CMakeLists.txt
+    ├── examples/
+    └── include/al_ext/ndi/
+        ├── al_NDIReceiver.*   # Receiver implementation
+        └── al_NDISender.*     # Sender implementation
+```
 ```cpp
 NDISender sender;
 sender.init("MyStream", NDISender::VideoConfig(1920, 1080));
@@ -60,15 +157,20 @@ sender.sendDirect(fbo.tex());  // Send FBO texture over NDI
 - Requires NDI SDK path in root CMakeLists.txt
 - Links with NDI libraries and allolib graphics
 - Include paths must cover allolib external dependencies
+- C++14 standard required for allolib compatibility
 
-## Testing
-- NDISenderTest example demonstrates basic functionality
-- Test with NDI monitoring tools to verify stream reception
-- Check for memory leaks during extended operation
+## Testing and Validation
+- **Sender Tests**: NDISimpleTest, NDISimpleApp demonstrate functionality
+- **Receiver Tests**: NDIReceiveTest, NDIVideoReceiverApp for receiving
+- **Cross-testing**: Run sender and receiver simultaneously
+- **Monitoring**: Use NDI Studio Monitor to verify streams
+- **Network**: Test on local network with proper firewall configuration
 
 ## Future Improvements
-- Implement NDIReceiver for receiving streams
-- Add audio support alongside video
-- Optimize memory transfers (PBOs, async transfers)
-- Add compression options
-- Support for multiple simultaneous streams
+- [x] Implement NDIReceiver for receiving streams (COMPLETED)
+- [ ] Add audio support alongside video
+- [ ] Optimize memory transfers (PBOs, async transfers)
+- [ ] Add compression options
+- [ ] Support for multiple simultaneous streams
+- [ ] GUI parameter controls for receiver
+- [ ] Hardware-accelerated receiving

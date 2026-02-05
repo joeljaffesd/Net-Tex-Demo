@@ -18,10 +18,10 @@ struct NDIVideoReceiverApp : public App {
     bool connected = false;
     string statusMessage = "Initializing...";
 
-    // UI parameters
-    ParameterMenu sourceMenu{"NDI Source", "", 0};
-    ParameterBool connectButton{"Connect", "", false};
-    ParameterBool disconnectButton{"Disconnect", "", false};
+    // UI parameters - simplified for now
+    // ParameterMenu sourceMenu{"NDI Source", "", 0};
+    // ParameterBool connectButton{"Connect", "", false};
+    // ParameterBool disconnectButton{"Disconnect", "", false};
 
     void onCreate() override {
         // Initialize NDI
@@ -38,21 +38,8 @@ struct NDIVideoReceiverApp : public App {
         // Get available sources
         refreshSources();
 
-        // Setup UI parameters
-        if (!availableSources.empty()) {
-            // Create menu options from available sources
-            vector<string> sourceNames;
-            for (const auto& source : availableSources) {
-                sourceNames.push_back(source.name);
-            }
-            sourceMenu.setElements(sourceNames);
-            sourceMenu.set(0); // Select first source by default
-        }
-
-        // Register parameters for GUI
-        registerParameter(sourceMenu);
-        registerParameter(connectButton);
-        registerParameter(disconnectButton);
+        // Setup UI parameters - simplified for now
+        // TODO: Add proper GUI integration later
 
         statusMessage = "Ready - Select NDI source and click Connect";
     }
@@ -60,16 +47,8 @@ struct NDIVideoReceiverApp : public App {
     void onDraw(Graphics& g) override {
         g.clear(0.1, 0.1, 0.1);
 
-        // Handle connection/disconnection
-        if (connectButton.get() && !connected) {
-            connectToSelectedSource();
-            connectButton.set(false);
-        }
-
-        if (disconnectButton.get() && connected) {
-            disconnectFromSource();
-            disconnectButton.set(false);
-        }
+        // Handle connection/disconnection - simplified for keyboard only
+        // TODO: Add GUI controls later
 
         // Try to receive and display frames
         if (connected && ndiReceiver.update(receivedTexture)) {
@@ -103,38 +82,11 @@ struct NDIVideoReceiverApp : public App {
     }
 
     void drawUI(Graphics& g) {
-        // Draw status text
-        g.pushMatrix();
-        g.loadIdentity();
-        g.color(1, 1, 1);
-        g.translate(-0.95, 0.9, 0);
-        g.scale(0.0005);
-        g.text(statusMessage, 0, 0, 0);
-        g.popMatrix();
-
-        // Draw source list if available
-        if (!availableSources.empty()) {
-            g.pushMatrix();
-            g.loadIdentity();
-            g.color(1, 1, 1);
-            g.translate(-0.95, 0.7, 0);
-            g.scale(0.0004);
-            g.text("Available NDI Sources:", 0, 0, 0);
-
-            for (size_t i = 0; i < availableSources.size(); ++i) {
-                g.translate(0, -50, 0);
-                if (i == selectedSourceIndex) {
-                    g.color(1, 1, 0); // Yellow for selected
-                } else {
-                    g.color(1, 1, 1); // White for others
-                }
-                g.text("  " + availableSources[i].name, 0, 0, 0);
-            }
-            g.popMatrix();
-        }
+        // Simplified UI - just show status in console for now
+        // TODO: Add proper text rendering later
     }
 
-    void onKeyDown(Keyboard const& k) override {
+    bool onKeyDown(Keyboard const& k) override {
         if (k.key() == 'r' || k.key() == 'R') {
             refreshSources();
         } else if (k.key() == 'c' || k.key() == 'C') {
@@ -149,10 +101,10 @@ struct NDIVideoReceiverApp : public App {
             int index = k.key() - '1';
             if (index >= 0 && index < (int)availableSources.size()) {
                 selectedSourceIndex = index;
-                sourceMenu.set(index);
                 cout << "Selected source: " << availableSources[index].name << endl;
             }
         }
+        return true; // Continue processing other key events
     }
 
     void refreshSources() {
@@ -164,8 +116,7 @@ struct NDIVideoReceiverApp : public App {
 
         if (!availableSources.empty()) {
             selectedSourceIndex = 0;
-            sourceMenu.set(0);
-            statusMessage = "Sources refreshed. Press C to connect or use GUI.";
+            statusMessage = "Sources refreshed. Press C to connect or use keyboard 1-9.";
         } else {
             statusMessage = "No NDI sources found. Press R to refresh.";
         }
@@ -177,7 +128,7 @@ struct NDIVideoReceiverApp : public App {
             return;
         }
 
-        int sourceIndex = sourceMenu.get();
+        int sourceIndex = selectedSourceIndex;
         if (sourceIndex < 0 || sourceIndex >= (int)availableSources.size()) {
             sourceIndex = 0;
         }
