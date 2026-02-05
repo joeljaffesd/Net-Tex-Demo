@@ -50,8 +50,17 @@ struct NDIVideoReceiverApp : public App {
         // Handle connection/disconnection - simplified for keyboard only
         // TODO: Add GUI controls later
 
-        // Try to receive and display frames
-        if (connected && ndiReceiver.update(receivedTexture)) {
+        // Try to receive frames - update texture if new frame available
+        bool frameReceived = false;
+        if (connected) {
+            frameReceived = ndiReceiver.update(receivedTexture);
+            if (frameReceived) {
+                cout << "Frame received: " << receivedTexture.width() << "x" << receivedTexture.height() << endl;
+            }
+        }
+
+        // Display the texture if we have one (either newly received or previously received)
+        if (receivedTexture.width() > 0 && receivedTexture.height() > 0) {
             // Draw the received texture
             g.pushMatrix();
             g.translate(0, 0, -4);
@@ -73,8 +82,13 @@ struct NDIVideoReceiverApp : public App {
             g.quad(receivedTexture, -1, -1, 2, 2);
             g.popMatrix();
 
-            statusMessage = "Receiving: " + to_string(receivedTexture.width()) + "x" +
-                          to_string(receivedTexture.height());
+            if (frameReceived) {
+                statusMessage = "Receiving: " + to_string(receivedTexture.width()) + "x" +
+                              to_string(receivedTexture.height());
+            } else {
+                statusMessage = "Connected (no new frame): " + to_string(receivedTexture.width()) + "x" +
+                              to_string(receivedTexture.height());
+            }
         }
 
         // Draw UI

@@ -9,6 +9,7 @@ This project implements a complete NDI (Network Device Interface) video streamin
 ### Core Components
 
 #### 1. NDI Sender (`al_NDISender`)
+
 - **Location**: `videoPipe/ndi_wrapping/include/al_ext/ndi/al_NDISender.hpp`
 - **Purpose**: Send OpenGL textures over NDI network streams
 - **Key Features**:
@@ -18,6 +19,7 @@ This project implements a complete NDI (Network Device Interface) video streamin
   - Memory-managed pixel buffers
 
 #### 2. NDI Receiver (`al_NDIReceiver`)
+
 - **Location**: `videoPipe/ndi_wrapping/include/al_ext/ndi/al_NDIReceiver.hpp`
 - **Purpose**: Receive NDI video streams and render to OpenGL textures
 - **Key Features**:
@@ -27,6 +29,7 @@ This project implements a complete NDI (Network Device Interface) video streamin
   - Connection management
 
 #### 3. AlloApps
+
 - **NDISimpleTest**: Console-based NDI sender test
 - **NDISimpleApp**: GUI-based NDI sender with animated patterns
 - **NDIVideoReceiverApp**: GUI-based NDI receiver with source selection
@@ -34,6 +37,7 @@ This project implements a complete NDI (Network Device Interface) video streamin
 ## Build System
 
 ### CMake Configuration
+
 ```cmake
 # Root CMakeLists.txt
 set(NDI_SDK_PATH "${CMAKE_CURRENT_LIST_DIR}/ndi/NDI SDK for Apple" CACHE PATH "Path to NDI SDK")
@@ -48,6 +52,7 @@ target_link_libraries(NDISimpleTest PRIVATE al al_ndi)
 ```
 
 ### Dependencies
+
 - **NDI SDK for Apple**: Network video streaming library
 - **allolib**: Graphics and application framework
 - **OpenGL**: GPU rendering and texture operations
@@ -60,6 +65,7 @@ target_link_libraries(NDISimpleTest PRIVATE al al_ndi)
 **Problem**: Original NDI sender incorrectly set `p_data` to OpenGL texture ID instead of CPU pixel data, causing crashes.
 
 **Solution**:
+
 ```cpp
 // Allocate CPU pixel buffer
 mHardwareCtx.pPixelData = new uint8_t[dataSize];
@@ -83,6 +89,7 @@ glReadPixels(0, 0, width, height, GL_BGRA, GL_UNSIGNED_BYTE, mHardwareCtx.pPixel
 ## Usage Examples
 
 ### Basic NDI Sender
+
 ```cpp
 #include "al_ext/ndi/al_NDISender.hpp"
 
@@ -95,6 +102,7 @@ sender.sendDirect(fbo.tex());
 ```
 
 ### Basic NDI Receiver
+
 ```cpp
 #include "al_ext/ndi/al_NDIReceiver.hpp"
 
@@ -113,6 +121,7 @@ if (receiver.update(tex)) {
 ```
 
 ### Complete AlloApp Receiver
+
 ```cpp
 struct MyNDIApp : public App {
     NDIReceiver receiver;
@@ -135,16 +144,19 @@ struct MyNDIApp : public App {
 ## Testing and Validation
 
 ### Test Applications
+
 1. **NDISimpleTest**: Console sender, verify basic functionality
 2. **NDIVideoReceiverApp**: GUI receiver, test source selection
 3. **Cross-testing**: Run sender and receiver simultaneously
 
 ### NDI Monitoring Tools
+
 - **NDI Studio Monitor** (recommended)
 - **NDI Tools suite** (free download)
 - **SDK examples** for basic testing
 
 ### Network Setup
+
 - Ensure sender and receiver on same local network
 - Check firewall settings
 - Use wired Ethernet for best performance
@@ -174,6 +186,7 @@ videoPipe/
 ## Key Classes Reference
 
 ### NDISender::VideoConfig
+
 ```cpp
 struct VideoConfig {
     int width = 1920;
@@ -184,6 +197,7 @@ struct VideoConfig {
 ```
 
 ### Source (Receiver)
+
 ```cpp
 struct Source {
     std::string name;  // Human-readable name
@@ -211,7 +225,9 @@ struct Source {
    - Check CPU/GPU usage
 
 ### Debug Output
+
 Enable verbose logging by modifying receiver connection code:
+
 ```cpp
 if (!receiver.connect(sourceName)) {
     std::cerr << "Failed to connect to: " << sourceName << std::endl;
@@ -221,18 +237,21 @@ if (!receiver.connect(sourceName)) {
 ## Future Enhancements
 
 ### High Priority
+
 - [ ] GUI parameter controls for receiver
 - [ ] Multiple simultaneous streams
 - [ ] Audio support alongside video
 - [ ] Connection status indicators
 
 ### Medium Priority
+
 - [ ] Hardware-accelerated receiving
 - [ ] Compressed video options
 - [ ] PTZ camera control
 - [ ] Recording capabilities
 
 ### Low Priority
+
 - [ ] WebRTC integration
 - [ ] Cloud streaming support
 - [ ] Advanced codec options
@@ -240,6 +259,7 @@ if (!receiver.connect(sourceName)) {
 ## Development Workflow
 
 ### Adding New Features
+
 1. Update planning.md with feature requirements
 2. Implement in appropriate class (sender/receiver)
 3. Add test in examples/ directory
@@ -248,6 +268,7 @@ if (!receiver.connect(sourceName)) {
 6. Update documentation
 
 ### Code Standards
+
 - Use allolib naming conventions
 - Include comprehensive error handling
 - Document public APIs
@@ -264,6 +285,7 @@ if (!receiver.connect(sourceName)) {
 ## Contributing
 
 When adding NDI features:
+
 1. Test with both sender and receiver
 2. Verify memory safety
 3. Update this documentation

@@ -16,11 +16,17 @@ if(NOT NDI_SDK_PATH)
     if(WIN32)
         set(NDI_SDK_PATH "C:/Program Files/NDI/NDI 5 SDK")
     elseif(APPLE)
-        # Check local project directory first, then system directory
-        if(EXISTS "${CMAKE_SOURCE_DIR}/../../../ndi/NDI SDK for Apple")
+        # Check local ndi_sdk directory first, then project directory, then system directory
+        message(STATUS "Checking for local NDI SDK at: ${CMAKE_CURRENT_SOURCE_DIR}/ndi_sdk")
+        if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/ndi_sdk")
+            set(NDI_SDK_PATH "${CMAKE_CURRENT_SOURCE_DIR}/ndi_sdk")
+            message(STATUS "Found local NDI SDK copy at: ${NDI_SDK_PATH}")
+        elseif(EXISTS "${CMAKE_SOURCE_DIR}/../../../ndi/NDI SDK for Apple")
             set(NDI_SDK_PATH "${CMAKE_SOURCE_DIR}/../../../ndi/NDI SDK for Apple")
+            message(STATUS "Found project NDI SDK at: ${NDI_SDK_PATH}")
         else()
             set(NDI_SDK_PATH "/Library/NDI SDK for Apple")
+            message(STATUS "Using system NDI SDK at: ${NDI_SDK_PATH}")
         endif()
     else() # Linux
         set(NDI_SDK_PATH "/usr/local/NDI SDK")
@@ -60,7 +66,7 @@ CXX_STANDARD 14
 
 # Add NDI include directories
 target_include_directories(al_ndi PUBLIC
-    ${NDI_SDK_PATH}/Include
+    ${NDI_SDK_PATH}/include
     ${CMAKE_CURRENT_SOURCE_DIR}/include
     ${CMAKE_CURRENT_SOURCE_DIR}/../../allolib/include
     ${CMAKE_CURRENT_SOURCE_DIR}/../../allolib/external/glad/include

@@ -1,17 +1,30 @@
 # NDI Video Receiver AlloApp - Planning Notes
 
+To do
+
+- solve issue: why does the NDI stream only temporarily connect then video dissapears
+-
+
+- gauge what files in the NDI apple SDK are needed, then transfer them to our videoPipe/ndi_wrapping/src folder
+- prune unessary files from ndi_wrapping and videoPipe folders
+- clean up NDIVIDEOreceiver app- this is our main app for this project.
+- create an output stream of data in terminal of what the ndi data is transmitted as
+
 ## Current Status
+
 - [x] NDI SDK integrated with allolib
 - [x] NDI sender working (NDISimpleTest, NDISimpleApp)
 - [x] NDI receiver class implemented (al_NDIReceiver)
 - [x] Basic receiver test app exists (NDIReceiveTest.cpp)
 
 ## Goal
+
 Build an alloApp that receives NDI video frames with the ability to select a video path (NDI source) and display the received frames.
 
 ## Key Components Analyzed
 
 ### NDIReceiver Class (`al_ext/ndi/al_NDIReceiver.hpp`)
+
 - **Methods:**
   - `init()` - Initialize NDI library
   - `getAvailableSources()` - Returns vector of available NDI sources
@@ -28,6 +41,7 @@ Build an alloApp that receives NDI video frames with the ability to select a vid
   ```
 
 ### Existing Receiver Test (`NDIReceiveTest.cpp`)
+
 - Simple alloApp that:
   - Initializes NDI receiver
   - Lists available sources on startup
@@ -38,26 +52,31 @@ Build an alloApp that receives NDI video frames with the ability to select a vid
 ## Required Features for Full Implementation
 
 ### 1. Source Selection
+
 - **UI Menu:** Dropdown/parameter menu to select from available NDI sources
 - **Dynamic Refresh:** Button to refresh available sources list
 - **Keyboard Shortcuts:** Number keys to quickly select sources 1-9
 
 ### 2. Connection Management
+
 - **Connect/Disconnect Buttons:** GUI controls to connect/disconnect
 - **Connection Status:** Visual feedback on connection state
 - **Auto-reconnection:** Handle source disconnections gracefully
 
 ### 3. Video Display
+
 - **Aspect Ratio Handling:** Proper scaling to fit screen while maintaining aspect ratio
 - **Resolution Display:** Show current video resolution in UI
 - **Performance Monitoring:** Frame rate, dropped frames, etc.
 
 ### 4. User Interface
+
 - **Parameter GUI:** Use allolib's ParameterGUI for controls
 - **Status Display:** Text overlay showing current status
 - **Source List:** Display available sources with selection highlighting
 
 ### 5. Error Handling
+
 - **Graceful Failures:** Handle NDI initialization failures
 - **Source Validation:** Check if selected source still exists
 - **Network Issues:** Handle network interruptions
@@ -65,24 +84,28 @@ Build an alloApp that receives NDI video frames with the ability to select a vid
 ## Implementation Plan
 
 ### Phase 1: Basic Receiver App
+
 1. Create `NDIVideoReceiverApp.cpp` with basic structure
 2. Initialize NDI receiver on startup
 3. Display received frames (connect to first available source)
 4. Add basic keyboard controls for connect/disconnect
 
 ### Phase 2: Source Selection
+
 1. Add source discovery and listing
 2. Implement source selection via keyboard (1-9 keys)
 3. Add refresh functionality (R key)
 4. Display source list in UI
 
 ### Phase 3: GUI Controls
+
 1. Add ParameterGUI integration
 2. Create source selection dropdown
 3. Add connect/disconnect buttons
 4. Add status display
 
 ### Phase 4: Enhanced Features
+
 1. Aspect ratio handling
 2. Resolution display
 3. Connection status feedback
@@ -91,18 +114,21 @@ Build an alloApp that receives NDI video frames with the ability to select a vid
 ## Technical Considerations
 
 ### NDI Receiver Behavior
+
 - `connect()` method finds sources dynamically each time
 - `update()` returns true only when a new frame is received
 - Texture is automatically resized if frame dimensions change
 - BGRA color format used for compatibility with OpenGL
 
 ### AlloApp Integration
+
 - Use `onCreate()` for initialization
 - Use `onDraw()` for frame updates and rendering
 - Use `onKeyDown()` for keyboard controls
 - Use Parameter system for GUI controls
 
 ### Build System
+
 - Add new executable to CMakeLists.txt
 - Link against al_ndi library
 - Set C++14 standard
@@ -111,18 +137,21 @@ Build an alloApp that receives NDI video frames with the ability to select a vid
 ## Testing Strategy
 
 ### Unit Testing
+
 - Test NDI initialization
 - Test source discovery
 - Test connection to valid/invalid sources
 - Test frame reception
 
 ### Integration Testing
+
 - Test with NDISimpleTest sender
 - Test with external NDI sources
 - Test network interruptions
 - Test source disconnections
 
 ### User Experience Testing
+
 - Test keyboard controls
 - Test GUI controls
 - Test different video resolutions
@@ -131,20 +160,24 @@ Build an alloApp that receives NDI video frames with the ability to select a vid
 ## Potential Issues
 
 ### 1. NDI Library Conflicts
+
 - Ensure only one NDI receiver instance per process
 - Handle multiple apps trying to access same source
 
 ### 2. Performance
+
 - NDI frame reception is blocking (1000ms timeout)
 - May need threading for smooth UI if network is slow
 - Texture uploads can be expensive for high-res video
 
 ### 3. Memory Management
+
 - NDI frames must be freed after use
 - Texture resizing on dimension changes
 - Proper cleanup on app exit
 
 ### 4. Network Considerations
+
 - NDI works over local network
 - Firewall settings may block NDI traffic
 - Multiple network interfaces may cause issues
@@ -152,6 +185,7 @@ Build an alloApp that receives NDI video frames with the ability to select a vid
 ## Future Enhancements
 
 ### Advanced Features
+
 - Multiple source preview (picture-in-picture)
 - Recording received video
 - Video effects/filters
@@ -159,12 +193,14 @@ Build an alloApp that receives NDI video frames with the ability to select a vid
 - PTZ camera control (if supported by source)
 
 ### Network Features
+
 - Source discovery over WAN
 - Authentication/security
 - Bandwidth monitoring
 - Quality of service controls
 
 ### UI Improvements
+
 - Drag-and-drop source selection
 - Source thumbnails/previews
 - Custom layouts
