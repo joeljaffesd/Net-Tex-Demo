@@ -43,7 +43,7 @@ target_include_directories(${APP_NAME} PRIVATE
     allolib/external/glad/include
     allolib/external/Gamma
     videoPipe/ndi_wrapping/include
-    ${CMAKE_CURRENT_LIST_DIR}/ndi/NDI SDK for Apple/include
+    # ${CMAKE_CURRENT_LIST_DIR}/ndi/NDI SDK for Apple/include
 )
 
 # Suppress warnings for now
