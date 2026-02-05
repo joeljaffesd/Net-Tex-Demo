@@ -20,8 +20,8 @@
 
 #include "al/app/al_DistributedApp.hpp"
 #include "al/graphics/al_Shapes.hpp"
-#include "al/graphics/al_Image.hpp"
-#include "al/io/al_File.hpp"
+#include "al/graphics/al_Shader.hpp"
+#include "al/graphics/al_FBO.hpp"
 #include "al_ext/statedistribution/al_CuttleboneStateSimulationDomain.hpp"
 
 // Define a basic state structure to demonstrate distributed functionality
@@ -29,16 +29,22 @@ struct SharedState {
   float color = 0.0f;        // Background color that changes over time
   float rotationAngle = 0.0f; // Rotation angle for visual demonstration
   int frameCount = 0;        // Frame counter
+  float time = 0.0f;         // Time for animation
   bool textureLoaded = false;
-  int textureWidth = 0;
-  int textureHeight = 0;
-  unsigned char textureData[2048 * 2048 * 4]; // Fixed size for demo, 2048x2048 RGBA
+  int textureWidth = 512;
+  int textureHeight = 512;
+  unsigned char textureData[512 * 512 * 4]; // Fixed size for demo, 512x512 RGBA
 };
 
 struct MyApp: public al::DistributedAppWithState<SharedState> {
   al::VAOMesh mesh;
-  al::Texture texture;
-  bool textureCreated = false;
+  al::ShaderProgram animatedShader;
+  bool shaderCompiled = false;
+  al::Texture renderTexture;  // For primary to render animated shader to
+  al::RBO rbo;                // Render buffer for depth
+  al::FBO fbo;                // Frame buffer object for offscreen rendering
+  al::Texture displayTexture; // For secondaries to display received texture
+  bool displayTextureCreated = false;
   std::shared_ptr<al::CuttleboneStateSimulationDomain<SharedState, 8000>> cuttleboneDomain;
 
   void onInit() override { // Called on app start
@@ -53,32 +59,75 @@ struct MyApp: public al::DistributedAppWithState<SharedState> {
 
   void onCreate() override { // Called when graphics context is available
     std::cout << "onCreate()" << std::endl;
-    // Create a simple quad mesh
-    al::addQuad(mesh, 0.6f, 0.6f);
+    // Create a simple quad mesh with texture coordinates
+    al::addTexRect(mesh, -0.6f, -0.6f, 1.2f, 1.2f);
     mesh.update();
 
-    // Primary loads the image and puts data into state
-    if (isPrimary()) {
-      const std::string filename = al::File::currentPath() + "../allolib/examples/graphics/bin/data/hubble.jpg";
-      auto imageData = al::Image(filename);
+    // Create animated shader
+    const char* vertexShader = R"(
+#version 330
+uniform mat4 al_ModelViewMatrix;
+uniform mat4 al_ProjectionMatrix;
+in vec3 vertexPosition;
+in vec2 vertexTexCoord;
+out vec2 vTexcoord;
 
-      if (imageData.array().size() == 0) {
-        std::cout << "Failed to load image " << filename << std::endl;
-      } else {
-        std::cout << "Loaded image size: " << imageData.width() << ", " << imageData.height() << std::endl;
-        size_t dataSize = imageData.array().size();
-        size_t expectedSize = imageData.width() * imageData.height() * 4;
-        size_t maxSize = sizeof(state().textureData);
-        if (dataSize == expectedSize && dataSize <= maxSize) {
-          std::memcpy(state().textureData, imageData.array().data(), dataSize);
-          state().textureWidth = imageData.width();
-          state().textureHeight = imageData.height();
-          state().textureLoaded = true;
-          std::cout << "Texture data loaded into state" << std::endl;
-        } else {
-          std::cout << "Image size mismatch or too large: dataSize=" << dataSize << ", expected=" << expectedSize << ", max=" << maxSize << std::endl;
-        }
-      }
+void main() {
+  vTexcoord = vertexTexCoord;
+  gl_Position = al_ProjectionMatrix * al_ModelViewMatrix * vec4(vertexPosition, 1.0);
+}
+)";
+
+    const char* fragmentShader = R"(
+#version 330
+uniform float uTime;
+in vec2 vTexcoord;
+out vec4 fragColor;
+
+void main() {
+  // Create animated pattern based on time and texture coordinates
+  vec2 uv = vTexcoord;
+  
+  // Create moving waves
+  float wave1 = sin(uv.x * 10.0 + uTime * 2.0) * 0.5 + 0.5;
+  float wave2 = sin(uv.y * 8.0 + uTime * 1.5) * 0.5 + 0.5;
+  float wave3 = sin((uv.x + uv.y) * 6.0 + uTime * 3.0) * 0.5 + 0.5;
+  
+  // Combine waves for RGB channels
+  float r = wave1;
+  float g = wave2; 
+  float b = wave3;
+  
+  // Add some color variation
+  r += sin(uTime + uv.x * 20.0) * 0.2;
+  g += cos(uTime * 0.7 + uv.y * 15.0) * 0.2;
+  b += sin(uTime * 1.3 + (uv.x + uv.y) * 12.0) * 0.2;
+  
+  // Make sure colors are in valid range
+  // r = clamp(r, 0.0, 1.0);
+  // g = clamp(g, 0.0, 1.0);
+  // b = clamp(b, 0.0, 1.0);
+  
+  fragColor = vec4(r, g, b, 1.0);
+}
+)";
+
+    if (animatedShader.compile(vertexShader, fragmentShader)) {
+      shaderCompiled = true;
+      std::cout << "Animated shader compiled successfully" << std::endl;
+    } else {
+      std::cout << "Failed to compile animated shader" << std::endl;
+    }
+
+    // Set up FBO for primary to render animated texture
+    if (isPrimary()) {
+      renderTexture.create2D(state().textureWidth, state().textureHeight);
+      rbo.resize(state().textureWidth, state().textureHeight);
+      fbo.bind();
+      fbo.attachTexture2D(renderTexture);
+      fbo.attachRBO(rbo);
+      fbo.unbind();
+      std::cout << "FBO status: " << fbo.statusString() << std::endl;
     }
   }
 
@@ -91,17 +140,31 @@ struct MyApp: public al::DistributedAppWithState<SharedState> {
       }
       state().rotationAngle += 0.02f;
       state().frameCount++;
+      state().time += dt; // Update time for animation
+
+      // Render animated shader to texture
+      if (shaderCompiled) {
+        // Set up orthographic projection for FBO rendering
+        al::Graphics fboG;
+        fboG.framebuffer(fbo);
+        fboG.viewport(0, 0, state().textureWidth, state().textureHeight);
+        fboG.clear(0, 0, 0);
+
+        // Use animated shader and render quad
+        fboG.shader(animatedShader);
+        animatedShader.uniform("uTime", state().time);
+        fboG.draw(mesh);
+
+        // Read texture data from FBO
+        renderTexture.bind();
+        glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_UNSIGNED_BYTE, state().textureData);
+        renderTexture.unbind();
+
+        state().textureLoaded = true;
+        std::cout << "Primary rendered frame " << state().frameCount << " to texture" << std::endl;
+      }
     }
     // Replicas automatically receive the updated state
-
-    // Create texture from state data if available and not created yet
-    if (state().textureLoaded && !textureCreated) {
-      texture.create2D(state().textureWidth, state().textureHeight);
-      texture.submit(state().textureData, GL_RGBA, GL_UNSIGNED_BYTE);
-      texture.filter(al::Texture::LINEAR);
-      textureCreated = true;
-      std::cout << "Texture created from state data on " << (cuttleboneDomain->isSender() ? "sender" : "receiver") << std::endl;
-    }
   } 
 
   void onDraw(al::Graphics& g) override { // Draw function  
@@ -114,11 +177,25 @@ struct MyApp: public al::DistributedAppWithState<SharedState> {
     g.draw(mesh);
     g.popMatrix();
     
-    // Display texture if created
-    if (textureCreated) {
+    // Display texture if available
+    if (state().textureLoaded && !displayTextureCreated) {
+      displayTexture.create2D(state().textureWidth, state().textureHeight);
+      displayTexture.submit(state().textureData, GL_RGBA, GL_UNSIGNED_BYTE);
+      displayTexture.filter(al::Texture::LINEAR);
+      displayTextureCreated = true;
+      std::cout << "Display texture created from state data" << std::endl;
+    } else if (state().textureLoaded && displayTextureCreated) {
+      // Update texture with new data
+      displayTexture.submit(state().textureData, GL_RGBA, GL_UNSIGNED_BYTE);
+      if (state().frameCount % 60 == 0) { // Log every 60 frames to avoid spam
+        std::cout << "Updated display texture for frame " << state().frameCount << std::endl;
+      }
+    }
+    
+    if (displayTextureCreated) {
       g.pushMatrix();
       g.translate(0, 0, -5);
-      g.quad(texture, -1, -1, 2, 2);
+      g.quad(displayTexture, -1, -1, 2, 2);
       g.popMatrix();
     }
     
