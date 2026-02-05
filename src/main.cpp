@@ -34,9 +34,9 @@ struct SharedState {
   float cent = 0.0f;         // Cent parameter for shader
   float flux = 0.0f;         // Flux parameter for shader
   bool textureLoaded = false;
-  int textureWidth = 512;
-  int textureHeight = 512;
-  unsigned char textureData[2048 * 2048 * 4]; // Larger buffer for various video resolutions
+  int textureWidth = 2048;  // 2k equirectangular width
+  int textureHeight = 1024; // 2k equirectangular height
+  unsigned char textureData[2048 * 1024 * 4]; // 2k equirectangular buffer
 };
 
 struct MyApp: public al::DistributedAppWithState<SharedState> {
@@ -61,8 +61,8 @@ struct MyApp: public al::DistributedAppWithState<SharedState> {
 
   void onCreate() override { // Called when graphics context is available
     std::cout << "onCreate()" << std::endl;
-    // Create a simple quad mesh with texture coordinates
-    al::addTexRect(mesh, -0.6f, -0.6f, 1.2f, 1.2f);
+    // Create a textured sphere mesh for equirectangular mapping
+    al::addTexSphere(mesh, 1.0f, 64, true); // radius 1, 64 bands, skybox mode for proper orientation
     mesh.update();
 
     // Initialize NDI receiver on primary
@@ -90,6 +90,9 @@ struct MyApp: public al::DistributedAppWithState<SharedState> {
       fbo.unbind();
       std::cout << "FBO status: " << fbo.statusString() << std::endl;
     }
+
+    // Position camera to view the sphere
+    // nav().pos(0, 0, 5).faceToward({0, 0, 0}, {0, 1, 0});
   }
 
   void onAnimate(double dt) override { // Called once before drawing
@@ -129,20 +132,20 @@ struct MyApp: public al::DistributedAppWithState<SharedState> {
   } 
 
   void onDraw(al::Graphics& g) override { // Draw function  
-    g.clear(state().color);  
+    g.clear(state().color); 
     
-    // Draw a rotating square to demonstrate state synchronization
-    g.pushMatrix();
-    g.rotate(state().rotationAngle, 0, 0, 1);
-    g.color(1.0f - state().color, 0.5f, state().color);
-    g.draw(mesh);
-    g.popMatrix();
+    // Enable depth testing for proper 3D rendering
+    al::gl::depthTesting(true);
     
     // Display texture if available
     if (state().textureLoaded) {
+      g.pushMatrix();
       // For primary: display the local renderTexture
       if (cuttleboneDomain->isSender()) {
-        g.quadViewport(renderTexture, -0.9, -0.9, 1.8, 1.8);
+        renderTexture.bind(0);
+        g.texture();
+        g.draw(mesh);
+        renderTexture.unbind(0);
       } else {
         // For secondaries: display texture from received state data
         // Recreate texture if dimensions changed
@@ -155,8 +158,19 @@ struct MyApp: public al::DistributedAppWithState<SharedState> {
                     << state().textureWidth << "x" << state().textureHeight << std::endl;
         }
         displayTexture.submit(state().textureData, GL_RGBA, GL_UNSIGNED_BYTE);
-        g.quadViewport(displayTexture, -0.9, -0.9, 1.8, 1.8);
+        displayTexture.bind(0);
+        g.texture();
+        g.draw(mesh);
+        displayTexture.unbind(0);
       }
+      g.popMatrix();
+    } else {
+      // Draw a simple sphere when no texture is loaded
+      g.pushMatrix();
+      g.rotate(state().rotationAngle, 0, 0, 1);
+      g.color(1.0f - state().color, 0.5f, state().color);
+      g.draw(mesh);
+      g.popMatrix();
     }
     
     // Display instance type and frame count
