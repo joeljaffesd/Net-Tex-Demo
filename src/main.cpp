@@ -57,6 +57,7 @@ struct MyApp: public al::App {
     if (k.key() == ' ') {
       color = 0.f;
     }
+    return true;
   }
 
 };

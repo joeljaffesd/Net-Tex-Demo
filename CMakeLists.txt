@@ -18,7 +18,7 @@ add_executable(${APP_NAME} src/main.cpp)
 
 # add allolib to project & link
 add_subdirectory(allolib)
-target_link_libraries(${APP_NAME} PRIVATE alapp)
+target_link_libraries(${APP_NAME} PRIVATE al)
 
 # add al_ext to project & link
 if (EXISTS ${CMAKE_CURRENT_LIST_DIR}/al_ext)
