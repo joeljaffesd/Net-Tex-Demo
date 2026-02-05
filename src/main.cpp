@@ -18,34 +18,69 @@
   #define SPEAKER_LAYOUT al::AlloSphereSpeakerLayoutCompensated()
 #endif
 
-#include "al/app/al_App.hpp"
+#include "al/app/al_DistributedApp.hpp"
+#include "al/graphics/al_Shapes.hpp"
 
-struct MyApp: public al::App {
+// Define a basic state structure to demonstrate distributed functionality
+struct SharedState {
+  float color = 0.0f;        // Background color that changes over time
+  float rotationAngle = 0.0f; // Rotation angle for visual demonstration
+  int frameCount = 0;        // Frame counter
+};
 
-  float color = 0.0;
+struct MyApp: public al::DistributedAppWithState<SharedState> {
+  al::VAOMesh mesh;
 
   void onInit() override { // Called on app start
-    std::cout << "onInit()" << std::endl;
+    std::cout << "onInit() - " << (isPrimary() ? "Primary" : "Replica") << " instance" << std::endl;
   }
 
   void onCreate() override { // Called when graphics context is available
     std::cout << "onCreate()" << std::endl;
+    // Create a simple quad mesh
+    al::addQuad(mesh, 0.6f, 0.6f);
+    mesh.update();
   }
 
   void onAnimate(double dt) override { // Called once before drawing
-    color += 0.01f;
-    if (color > 1.f) {
-      color -= 1.f;
+    // Primary instance updates the shared state
+    if (isPrimary()) {
+      state().color += 0.01f;
+      if (state().color > 1.f) {
+        state().color -= 1.f;
+      }
+      state().rotationAngle += 0.02f;
+      state().frameCount++;
     }
+    // Replicas automatically receive the updated state
   } 
 
   void onDraw(al::Graphics& g) override { // Draw function  
-    g.clear(color);  
+    g.clear(state().color);  
+    
+    // Draw a rotating square to demonstrate state synchronization
+    g.pushMatrix();
+    g.rotate(state().rotationAngle, 0, 0, 1);
+    g.color(1.0f - state().color, 0.5f, state().color);
+    g.draw(mesh);
+    g.popMatrix();
+    
+    // Display instance type and frame count
+    std::string info = isPrimary() ? "PRIMARY - Frame: " : "REPLICA - Frame: ";
+    info += std::to_string(state().frameCount);
+    // Note: Text rendering would require additional setup, so we'll skip it for this basic demo
   }
 
   void onSound(al::AudioIOData& io) override { // Audio callback  
+    static float phase = 0.0f;
+    float sampleRate = io.framesPerSecond();
     while (io()) {    
-      io.out(0) = io.out(1) = 0.f;
+      // Generate a simple tone based on the shared color value
+      float freq = 220.0f + (state().color * 440.0f);
+      float sample = sinf(phase) * 0.1f;
+      phase += M_2PI * freq / sampleRate;
+      if (phase > M_2PI) phase -= M_2PI;
+      io.out(0) = io.out(1) = sample;
     }
   }
 
@@ -55,7 +90,11 @@ struct MyApp: public al::App {
 
   bool onKeyDown(const al::Keyboard& k) override {
     if (k.key() == ' ') {
-      color = 0.f;
+      if (isPrimary()) {
+        state().color = 0.f;
+        state().rotationAngle = 0.f;
+        state().frameCount = 0;
+      }
     }
     return true;
   }
@@ -64,7 +103,7 @@ struct MyApp: public al::App {
 
 int main() {
   MyApp app;
-  app.title("Main");
+  app.title("Distributed Demo");
   app.configureAudio(AUDIO_CONFIG);
   app.start();
   return 0;

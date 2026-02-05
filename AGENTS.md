@@ -28,6 +28,8 @@ The current project demonstrates basic usage of the AlloApp framework with graph
 
 **MANDATORY**: After making ANY changes to source code, documentation, or configuration files, you MUST run `./run.sh` to build and test the changes.
 
+**IMPORTANT**: Always use `bash run.sh` directly for testing changes. Do NOT use VS Code's task system or other automated tools to run the build script, as this ensures proper environment setup and consistent behavior.
+
 The `./run.sh` script performs the following:
 1. Configures the build using CMake with Release settings
 2. Builds the project in parallel
