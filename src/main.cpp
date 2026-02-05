@@ -208,10 +208,9 @@ void main() {
     }
     
     if (displayTextureCreated) {
-      g.pushMatrix();
-      g.translate(0, 0, -5);
-      g.quad(displayTexture, -1, -1, 2, 2);
-      g.popMatrix();
+      // Draw texture in screen space using quadViewport
+      // This renders directly to the screen without 3D transformations
+      g.quadViewport(displayTexture, -0.9, -0.9, 1.8, 1.8);
     }
     
     // Display instance type and frame count
