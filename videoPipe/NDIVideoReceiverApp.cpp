@@ -65,18 +65,23 @@ struct NDIVideoReceiverApp : public App {
             g.pushMatrix();
             g.translate(0, 0, -4);
 
+            // NDI frames are stored upside down, flip vertically
+            g.scale(1, -1, 1);
+
             // Calculate aspect ratio to fit screen
             float screenAspect = width() / (float)height();
             float textureAspect = receivedTexture.width() / (float)receivedTexture.height();
 
             if (textureAspect > screenAspect) {
                 // Texture is wider, fit to width
-                float scale = 2.0f / textureAspect;
-                g.scale(textureAspect * scale, scale, 1);
+                float scaleX = 2.0f;
+                float scaleY = 2.0f / textureAspect;
+                g.scale(scaleX, scaleY, 1);
             } else {
                 // Texture is taller, fit to height
-                float scale = 2.0f / textureAspect;
-                g.scale(scale, textureAspect * scale, 1);
+                float scaleX = 2.0f * textureAspect;
+                float scaleY = 2.0f;
+                g.scale(scaleX, scaleY, 1);
             }
 
             g.quad(receivedTexture, -1, -1, 2, 2);

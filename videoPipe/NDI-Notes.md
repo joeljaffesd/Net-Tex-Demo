@@ -81,6 +81,73 @@ if (receiver.update(tex)) {
 }
 ```
 
+## Video Distortion Fixes (Feb 2026)
+
+### Problem Identified
+
+The NDI receiver was displaying distorted and improperly formatted video frames due to several critical issues:
+
+1. **Color Format Mismatch**: NDI receiver configured for BGRA data, but OpenGL texture created with RGBA format
+2. **Incorrect Aspect Ratio Scaling**: Flawed scaling logic causing improper screen fitting
+3. **Missing Orientation Correction**: NDI frames stored upside-down relative to OpenGL coordinate system
+
+### Root Causes
+
+- **BGRA vs RGBA**: `NDIlib_recv_color_format_BGRX_BGRA` data submitted to RGBA-configured texture
+- **Scaling Math Error**: Incorrect aspect ratio calculations in `NDIVideoReceiverApp.cpp`
+- **Coordinate System**: NDI top-to-bottom vs OpenGL bottom-to-top origin
+
+### Solutions Implemented
+
+#### 1. Texture Format Correction
+```cpp
+// Before: Default RGBA texture
+tex.resize(mWidth, mHeight);
+
+// After: BGRA texture to match NDI data
+tex.resize(mWidth, mHeight, GL_RGBA8, GL_BGRA, GL_UNSIGNED_BYTE);
+tex.submit(videoFrame.p_data);  // No format override needed
+```
+
+#### 2. Aspect Ratio Scaling Fix
+```cpp
+// Before: Incorrect scaling logic
+float scale = 2.0f / textureAspect;
+g.scale(textureAspect * scale, scale, 1);
+
+// After: Proper aspect ratio fitting
+if (textureAspect > screenAspect) {
+    // Texture wider than screen
+    float scaleX = 2.0f;
+    float scaleY = 2.0f / textureAspect;
+    g.scale(scaleX, scaleY, 1);
+} else {
+    // Texture taller than screen
+    float scaleX = 2.0f * textureAspect;
+    float scaleY = 2.0f;
+    g.scale(scaleX, scaleY, 1);
+}
+```
+
+#### 3. Vertical Orientation Flip
+```cpp
+// Added vertical flip for correct orientation
+g.scale(1, -1, 1);  // Flip Y axis
+g.quad(receivedTexture, -1, -1, 2, 2);
+```
+
+### Files Modified
+
+- `al_ext/ndi/src/al_NDIReceiver.cpp`: Texture format configuration
+- `videoPipe/NDIVideoReceiverApp.cpp`: Scaling logic and orientation correction
+
+### Results
+
+- **Color Accuracy**: Proper BGRA→RGBA conversion eliminates color distortion
+- **Aspect Ratio**: Correct proportional scaling for all video resolutions
+- **Orientation**: Right-side-up video display
+- **Resolution Support**: Tested with 1920×1080, 2000×2000, and 3840×2160 (4K)
+
 ## Performance Considerations
 
 - **Sender**: GPU→CPU transfer (~4MB/frame for 1024×768 RGBA)

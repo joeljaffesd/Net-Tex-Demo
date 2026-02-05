@@ -75,6 +75,40 @@ mHardwareCtx.videoFrame.p_data = mHardwareCtx.pPixelData;
 glReadPixels(0, 0, width, height, GL_BGRA, GL_UNSIGNED_BYTE, mHardwareCtx.pPixelData);
 ```
 
+### Video Distortion Fixes (Feb 2026)
+
+**Problem**: NDI receiver displayed distorted video due to color format mismatch, incorrect scaling, and orientation issues.
+
+**Solutions**:
+
+1. **Color Format Correction**:
+```cpp
+// Create texture with BGRA format to match NDI data
+tex.resize(mWidth, mHeight, GL_RGBA8, GL_BGRA, GL_UNSIGNED_BYTE);
+tex.submit(videoFrame.p_data);
+```
+
+2. **Aspect Ratio Scaling Fix**:
+```cpp
+// Proper proportional scaling for screen fitting
+if (textureAspect > screenAspect) {
+    float scaleX = 2.0f;
+    float scaleY = 2.0f / textureAspect;
+    g.scale(scaleX, scaleY, 1);
+} else {
+    float scaleX = 2.0f * textureAspect;
+    float scaleY = 2.0f;
+    g.scale(scaleX, scaleY, 1);
+}
+```
+
+3. **Orientation Correction**:
+```cpp
+// Flip Y axis for correct orientation
+g.scale(1, -1, 1);
+g.quad(receivedTexture, -1, -1, 2, 2);
+```
+
 ### Texture Format Handling
 
 **Sender**: OpenGL textures (RGBA) → BGRA pixel buffer → NDI
@@ -277,6 +311,7 @@ if (!receiver.connect(sourceName)) {
 
 ## Version History
 
+- **Feb 2026**: Fixed NDI video distortion issues (color format, aspect ratio, orientation)
 - **Feb 2026**: Complete NDI receiver implementation with source selection
 - **Feb 2026**: Fixed critical memory management bug in sender
 - **Feb 2026**: Initial NDI integration with allolib
