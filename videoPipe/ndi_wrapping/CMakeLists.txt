@@ -4,8 +4,6 @@ list(APPEND CMAKE_MODULE_PATH
 ${CMAKE_CURRENT_LIST_DIR}
 )
 
-include("../BuildExamples.cmake")
-
 project(al_ndi)
 
 # Allow user to specify NDI SDK path
