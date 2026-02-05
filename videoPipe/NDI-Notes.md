@@ -100,6 +100,7 @@ The NDI receiver was displaying distorted and improperly formatted video frames 
 ### Solutions Implemented
 
 #### 1. Texture Format Correction
+
 ```cpp
 // Before: Default RGBA texture
 tex.resize(mWidth, mHeight);
@@ -110,6 +111,7 @@ tex.submit(videoFrame.p_data);  // No format override needed
 ```
 
 #### 2. Aspect Ratio Scaling Fix
+
 ```cpp
 // Before: Incorrect scaling logic
 float scale = 2.0f / textureAspect;
@@ -130,6 +132,7 @@ if (textureAspect > screenAspect) {
 ```
 
 #### 3. Vertical Orientation Flip
+
 ```cpp
 // Added vertical flip for correct orientation
 g.scale(1, -1, 1);  // Flip Y axis
