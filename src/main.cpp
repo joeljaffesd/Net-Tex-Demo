@@ -30,6 +30,9 @@ struct SharedState {
   float rotationAngle = 0.0f; // Rotation angle for visual demonstration
   int frameCount = 0;        // Frame counter
   float time = 0.0f;         // Time for animation
+  float onset = 0.0f;        // Onset parameter for shader
+  float cent = 0.0f;         // Cent parameter for shader
+  float flux = 0.0f;         // Flux parameter for shader
   bool textureLoaded = false;
   int textureWidth = 512;
   int textureHeight = 512;
@@ -70,45 +73,49 @@ uniform mat4 al_ModelViewMatrix;
 uniform mat4 al_ProjectionMatrix;
 in vec3 vertexPosition;
 in vec2 vertexTexCoord;
-out vec2 vTexcoord;
+out vec3 vPos;
+out vec2 vUV;
 
 void main() {
-  vTexcoord = vertexTexCoord;
+  vPos = vertexPosition;
+  vUV = vertexTexCoord;
   gl_Position = al_ProjectionMatrix * al_ModelViewMatrix * vec4(vertexPosition, 1.0);
 }
 )";
 
     const char* fragmentShader = R"(
-#version 330
-uniform float uTime;
-in vec2 vTexcoord;
+#version 330 core
+
+in vec3 vPos; //recieve from vert
+in vec2 vUV;
+
 out vec4 fragColor;
 
+uniform float u_time;
+uniform float onset;
+uniform float cent;
+uniform float flux;
+
+
+// *** STARTER CODE INSPIRED BY : https://www.shadertoy.com/view/4lSSRy *** //
+
 void main() {
-  // Create animated pattern based on time and texture coordinates
-  vec2 uv = vTexcoord;
-  
-  // Create moving waves
-  float wave1 = sin(uv.x * 10.0 + uTime * 2.0) * 0.5 + 0.5;
-  float wave2 = sin(uv.y * 8.0 + uTime * 1.5) * 0.5 + 0.5;
-  float wave3 = sin((uv.x + uv.y) * 6.0 + uTime * 3.0) * 0.5 + 0.5;
-  
-  // Combine waves for RGB channels
-  float r = wave1;
-  float g = wave2; 
-  float b = wave3;
-  
-  // Add some color variation
-  r += sin(uTime + uv.x * 20.0) * 0.2;
-  g += cos(uTime * 0.7 + uv.y * 15.0) * 0.2;
-  b += sin(uTime * 1.3 + (uv.x + uv.y) * 12.0) * 0.2;
-  
-  // Make sure colors are in valid range
-  // r = clamp(r, 0.0, 1.0);
-  // g = clamp(g, 0.0, 1.0);
-  // b = clamp(b, 0.0, 1.0);
-  
-  fragColor = vec4(r, g, b, 1.0);
+    vec2 uv = 0.3 * vPos.xy;
+    mediump float t = (u_time * 0.01) + onset;
+
+    mediump float k = cos(t);
+    mediump float l = sin(t);
+    mediump float s = 0.2 + (onset/10.0);
+
+    // XXX simplify back to shadertoy example
+    for(int i = 0; i < 32; ++i) {
+        uv  = abs(uv) - s;//-onset;    // Mirror
+        uv *= mat2(k,-l,l,k); // Rotate
+        s  *= .95156;///(t+1);         // Scale
+    }
+
+    mediump float x = .5 + .5 * cos(6.28318 * (40.0 * length(uv)));
+    fragColor = .5 + .5 * cos(6.28318 * (40.0 * length(uv)) * vec4(-1,2 + (u_time / 500.0), 3 + flux, 1));
 }
 )";
 
@@ -141,6 +148,11 @@ void main() {
       state().rotationAngle += 0.02f;
       state().frameCount++;
       state().time += dt; // Update time for animation
+      
+      // Update shader parameters
+      state().onset = sin(state().time * 0.5f) * 0.5f + 0.5f;
+      state().cent = cos(state().time * 0.3f) * 0.5f + 0.5f;
+      state().flux = sin(state().time * 0.7f) * 0.5f + 0.5f;
 
       // Render animated shader to texture
       if (shaderCompiled) {
@@ -152,7 +164,10 @@ void main() {
 
         // Use animated shader and render quad
         fboG.shader(animatedShader);
-        animatedShader.uniform("uTime", state().time);
+        animatedShader.uniform("u_time", state().time);
+        animatedShader.uniform("onset", state().onset);
+        animatedShader.uniform("cent", state().cent);
+        animatedShader.uniform("flux", state().flux);
         fboG.draw(mesh);
 
         // Read texture data from FBO
