@@ -20,9 +20,9 @@
 
 #include "al/app/al_DistributedApp.hpp"
 #include "al/graphics/al_Shapes.hpp"
-#include "al/graphics/al_Shader.hpp"
 #include "al/graphics/al_FBO.hpp"
 #include "al_ext/statedistribution/al_CuttleboneStateSimulationDomain.hpp"
+#include "videoPipe/ndi_wrapping/include/al_ext/ndi/al_NDIReceiver.hpp"
 
 // Define a basic state structure to demonstrate distributed functionality
 struct SharedState {
@@ -36,18 +36,15 @@ struct SharedState {
   bool textureLoaded = false;
   int textureWidth = 512;
   int textureHeight = 512;
-  unsigned char textureData[512 * 512 * 4]; // Fixed size for demo, 512x512 RGBA
+
 };
 
 struct MyApp: public al::DistributedAppWithState<SharedState> {
   al::VAOMesh mesh;
-  al::ShaderProgram animatedShader;
-  bool shaderCompiled = false;
-  al::Texture renderTexture;  // For primary to render animated shader to
+  al::Texture renderTexture;  // For primary to receive NDI video
   al::RBO rbo;                // Render buffer for depth
   al::FBO fbo;                // Frame buffer object for offscreen rendering
-  al::Texture displayTexture; // For secondaries to display received texture
-  bool displayTextureCreated = false;
+  al::NDIReceiver ndiReceiver; // NDI receiver for primary
   std::shared_ptr<al::CuttleboneStateSimulationDomain<SharedState, 8000>> cuttleboneDomain;
 
   void onInit() override { // Called on app start
@@ -66,64 +63,19 @@ struct MyApp: public al::DistributedAppWithState<SharedState> {
     al::addTexRect(mesh, -0.6f, -0.6f, 1.2f, 1.2f);
     mesh.update();
 
-    // Create animated shader
-    const char* vertexShader = R"(
-#version 330
-uniform mat4 al_ModelViewMatrix;
-uniform mat4 al_ProjectionMatrix;
-in vec3 vertexPosition;
-in vec2 vertexTexCoord;
-out vec3 vPos;
-out vec2 vUV;
-
-void main() {
-  vPos = vertexPosition;
-  vUV = vertexTexCoord;
-  gl_Position = al_ProjectionMatrix * al_ModelViewMatrix * vec4(vertexPosition, 1.0);
-}
-)";
-
-    const char* fragmentShader = R"(
-#version 330 core
-
-in vec3 vPos; //recieve from vert
-in vec2 vUV;
-
-out vec4 fragColor;
-
-uniform float u_time;
-uniform float onset;
-uniform float cent;
-uniform float flux;
-
-
-// *** STARTER CODE INSPIRED BY : https://www.shadertoy.com/view/4lSSRy *** //
-
-void main() {
-    vec2 uv = 0.3 * vPos.xy;
-    mediump float t = (u_time * 0.01) + onset;
-
-    mediump float k = cos(t);
-    mediump float l = sin(t);
-    mediump float s = 0.2 + (onset/10.0);
-
-    // XXX simplify back to shadertoy example
-    for(int i = 0; i < 32; ++i) {
-        uv  = abs(uv) - s;//-onset;    // Mirror
-        uv *= mat2(k,-l,l,k); // Rotate
-        s  *= .95156;///(t+1);         // Scale
-    }
-
-    mediump float x = .5 + .5 * cos(6.28318 * (40.0 * length(uv)));
-    fragColor = .5 + .5 * cos(6.28318 * (40.0 * length(uv)) * vec4(-1,2 + (u_time / 500.0), 3 + flux, 1));
-}
-)";
-
-    if (animatedShader.compile(vertexShader, fragmentShader)) {
-      shaderCompiled = true;
-      std::cout << "Animated shader compiled successfully" << std::endl;
-    } else {
-      std::cout << "Failed to compile animated shader" << std::endl;
+    // Initialize NDI receiver on primary
+    if (isPrimary()) {
+      if (!ndiReceiver.init()) {
+        std::cerr << "Failed to initialize NDI receiver" << std::endl;
+      } else {
+        std::cout << "NDI receiver initialized" << std::endl;
+        // Try to connect to first available source
+        if (!ndiReceiver.connect()) {
+          std::cout << "No NDI sources found or failed to connect" << std::endl;
+        } else {
+          std::cout << "Connected to NDI source" << std::endl;
+        }
+      }
     }
 
     // Set up FBO for primary to render animated texture
@@ -154,29 +106,10 @@ void main() {
       state().cent = cos(state().time * 0.3f) * 0.5f + 0.5f;
       state().flux = sin(state().time * 0.7f) * 0.5f + 0.5f;
 
-      // Render animated shader to texture
-      if (shaderCompiled) {
-        // Set up orthographic projection for FBO rendering
-        al::Graphics fboG;
-        fboG.framebuffer(fbo);
-        fboG.viewport(0, 0, state().textureWidth, state().textureHeight);
-        fboG.clear(0, 0, 0);
-
-        // Use animated shader and render quad
-        fboG.shader(animatedShader);
-        animatedShader.uniform("u_time", state().time);
-        animatedShader.uniform("onset", state().onset);
-        animatedShader.uniform("cent", state().cent);
-        animatedShader.uniform("flux", state().flux);
-        fboG.draw(mesh);
-
-        // Read texture data from FBO
-        renderTexture.bind();
-        glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_UNSIGNED_BYTE, state().textureData);
-        renderTexture.unbind();
-
+      // Update texture with NDI video
+      if (ndiReceiver.update(renderTexture)) {
         state().textureLoaded = true;
-        std::cout << "Primary rendered frame " << state().frameCount << " to texture" << std::endl;
+        std::cout << "Primary received NDI frame " << state().frameCount << " to texture" << std::endl;
       }
     }
     // Replicas automatically receive the updated state
@@ -192,25 +125,10 @@ void main() {
     g.draw(mesh);
     g.popMatrix();
     
-    // Display texture if available
-    if (state().textureLoaded && !displayTextureCreated) {
-      displayTexture.create2D(state().textureWidth, state().textureHeight);
-      displayTexture.submit(state().textureData, GL_RGBA, GL_UNSIGNED_BYTE);
-      displayTexture.filter(al::Texture::LINEAR);
-      displayTextureCreated = true;
-      std::cout << "Display texture created from state data" << std::endl;
-    } else if (state().textureLoaded && displayTextureCreated) {
-      // Update texture with new data
-      displayTexture.submit(state().textureData, GL_RGBA, GL_UNSIGNED_BYTE);
-      if (state().frameCount % 60 == 0) { // Log every 60 frames to avoid spam
-        std::cout << "Updated display texture for frame " << state().frameCount << std::endl;
-      }
-    }
-    
-    if (displayTextureCreated) {
+    // Display NDI texture on primary
+    if (isPrimary() && state().textureLoaded) {
       // Draw texture in screen space using quadViewport
-      // This renders directly to the screen without 3D transformations
-      g.quadViewport(displayTexture, -0.9, -0.9, 1.8, 1.8);
+      g.quadViewport(renderTexture, -0.9, -0.9, 1.8, 1.8);
     }
     
     // Display instance type and frame count
