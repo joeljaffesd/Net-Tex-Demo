@@ -22,20 +22,33 @@
 #include "al/graphics/al_Shapes.hpp"
 #include "al/graphics/al_Image.hpp"
 #include "al/io/al_File.hpp"
+#include "al_ext/statedistribution/al_CuttleboneStateSimulationDomain.hpp"
 
 // Define a basic state structure to demonstrate distributed functionality
 struct SharedState {
   float color = 0.0f;        // Background color that changes over time
   float rotationAngle = 0.0f; // Rotation angle for visual demonstration
   int frameCount = 0;        // Frame counter
+  bool textureLoaded = false;
+  int textureWidth = 0;
+  int textureHeight = 0;
+  unsigned char textureData[2048 * 2048 * 4]; // Fixed size for demo, 2048x2048 RGBA
 };
 
 struct MyApp: public al::DistributedAppWithState<SharedState> {
   al::VAOMesh mesh;
   al::Texture texture;
+  bool textureCreated = false;
+  std::shared_ptr<al::CuttleboneStateSimulationDomain<SharedState, 8000>> cuttleboneDomain;
 
   void onInit() override { // Called on app start
     std::cout << "onInit() - " << (isPrimary() ? "Primary" : "Replica") << " instance" << std::endl;
+    // Enable Cuttlebone with larger packet size for texture data
+    cuttleboneDomain = al::CuttleboneStateSimulationDomain<SharedState, 8000>::enableCuttlebone(this);
+    if (!cuttleboneDomain) {
+      std::cerr << "ERROR: Could not start Cuttlebone. Quitting." << std::endl;
+      quit();
+    }
   }
 
   void onCreate() override { // Called when graphics context is available
@@ -44,23 +57,34 @@ struct MyApp: public al::DistributedAppWithState<SharedState> {
     al::addQuad(mesh, 0.6f, 0.6f);
     mesh.update();
 
-    // Load image for texture display
-    const std::string filename = al::File::currentPath() + "../allolib/examples/graphics/bin/data/hubble.jpg";
-    auto imageData = al::Image(filename);
+    // Primary loads the image and puts data into state
+    if (isPrimary()) {
+      const std::string filename = al::File::currentPath() + "../allolib/examples/graphics/bin/data/hubble.jpg";
+      auto imageData = al::Image(filename);
 
-    if (imageData.array().size() == 0) {
-      std::cout << "Failed to load image " << filename << std::endl;
-    } else {
-      std::cout << "Loaded image size: " << imageData.width() << ", " << imageData.height() << std::endl;
-      texture.create2D(imageData.width(), imageData.height());
-      texture.submit(imageData.array().data(), GL_RGBA, GL_UNSIGNED_BYTE);
-      texture.filter(al::Texture::LINEAR);
+      if (imageData.array().size() == 0) {
+        std::cout << "Failed to load image " << filename << std::endl;
+      } else {
+        std::cout << "Loaded image size: " << imageData.width() << ", " << imageData.height() << std::endl;
+        size_t dataSize = imageData.array().size();
+        size_t expectedSize = imageData.width() * imageData.height() * 4;
+        size_t maxSize = sizeof(state().textureData);
+        if (dataSize == expectedSize && dataSize <= maxSize) {
+          std::memcpy(state().textureData, imageData.array().data(), dataSize);
+          state().textureWidth = imageData.width();
+          state().textureHeight = imageData.height();
+          state().textureLoaded = true;
+          std::cout << "Texture data loaded into state" << std::endl;
+        } else {
+          std::cout << "Image size mismatch or too large: dataSize=" << dataSize << ", expected=" << expectedSize << ", max=" << maxSize << std::endl;
+        }
+      }
     }
   }
 
   void onAnimate(double dt) override { // Called once before drawing
     // Primary instance updates the shared state
-    if (isPrimary()) {
+    if (cuttleboneDomain->isSender()) {
       state().color += 0.01f;
       if (state().color > 1.f) {
         state().color -= 1.f;
@@ -69,6 +93,15 @@ struct MyApp: public al::DistributedAppWithState<SharedState> {
       state().frameCount++;
     }
     // Replicas automatically receive the updated state
+
+    // Create texture from state data if available and not created yet
+    if (state().textureLoaded && !textureCreated) {
+      texture.create2D(state().textureWidth, state().textureHeight);
+      texture.submit(state().textureData, GL_RGBA, GL_UNSIGNED_BYTE);
+      texture.filter(al::Texture::LINEAR);
+      textureCreated = true;
+      std::cout << "Texture created from state data on " << (cuttleboneDomain->isSender() ? "sender" : "receiver") << std::endl;
+    }
   } 
 
   void onDraw(al::Graphics& g) override { // Draw function  
@@ -81,8 +114,8 @@ struct MyApp: public al::DistributedAppWithState<SharedState> {
     g.draw(mesh);
     g.popMatrix();
     
-    // Display texture only on primary instance
-    if (isPrimary()) {
+    // Display texture if created
+    if (textureCreated) {
       g.pushMatrix();
       g.translate(0, 0, -5);
       g.quad(texture, -1, -1, 2, 2);
@@ -90,7 +123,7 @@ struct MyApp: public al::DistributedAppWithState<SharedState> {
     }
     
     // Display instance type and frame count
-    std::string info = isPrimary() ? "PRIMARY - Frame: " : "REPLICA - Frame: ";
+    std::string info = cuttleboneDomain->isSender() ? "SENDER - Frame: " : "RECEIVER - Frame: ";
     info += std::to_string(state().frameCount);
     // Note: Text rendering would require additional setup, so we'll skip it for this basic demo
   }
@@ -114,7 +147,7 @@ struct MyApp: public al::DistributedAppWithState<SharedState> {
 
   bool onKeyDown(const al::Keyboard& k) override {
     if (k.key() == ' ') {
-      if (isPrimary()) {
+      if (cuttleboneDomain->isSender()) {
         state().color = 0.f;
         state().rotationAngle = 0.f;
         state().frameCount = 0;
