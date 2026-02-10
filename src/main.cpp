@@ -21,8 +21,11 @@
 #include "al/app/al_DistributedApp.hpp"
 #include "al/graphics/al_Shapes.hpp"
 #include "al/graphics/al_FBO.hpp"
+#include "al/graphics/al_Shader.hpp"
+#include "al/io/al_File.hpp"
 #include "al_ext/statedistribution/al_CuttleboneStateSimulationDomain.hpp"
-#include "videoPipe/ndi_wrapping/include/al_ext/ndi/al_NDIReceiver.hpp"
+#include <fstream>
+#include <sstream>
 
 // Define a basic state structure to demonstrate distributed functionality
 struct SharedState {
@@ -41,12 +44,13 @@ struct SharedState {
 
 struct MyApp: public al::DistributedAppWithState<SharedState> {
   al::VAOMesh mesh;
-  al::Texture renderTexture;  // For displaying NDI video
+  al::Texture renderTexture;  // For displaying rendered shader
   al::RBO rbo;                // Render buffer for depth
   al::FBO fbo;                // Frame buffer object for offscreen rendering
   al::Texture displayTexture; // For secondaries to display received texture
   bool displayTextureCreated = false;
-  al::NDIReceiver ndiReceiver; // NDI receiver for primary
+  al::ShaderProgram shaderProgram; // Shader for generating texture
+  al::VAOMesh quadMesh;       // Quad for rendering shader
   std::shared_ptr<al::CuttleboneStateSimulationDomain<SharedState, 8000>> cuttleboneDomain;
 
   void onInit() override { // Called on app start
@@ -57,28 +61,48 @@ struct MyApp: public al::DistributedAppWithState<SharedState> {
       std::cerr << "ERROR: Could not start Cuttlebone. Quitting." << std::endl;
       quit();
     }
+
+    // Add search path for shaders
+    // al::File::searchPaths().add("../");
   }
 
   void onCreate() override { // Called when graphics context is available
     std::cout << "onCreate()" << std::endl;
     // Create a textured sphere mesh for equirectangular mapping
-    al::addTexSphere(mesh, 1.0f, 64, true); // radius 1, 64 bands, skybox mode for proper orientation
+    al::addTexSphere(mesh, 1.0f, 64, false); // radius 1, 64 bands, equirectangular mode
     mesh.update();
 
-    // Initialize NDI receiver on primary
-    if (isPrimary()) {
-      if (!ndiReceiver.init()) {
-        std::cerr << "Failed to initialize NDI receiver" << std::endl;
-      } else {
-        std::cout << "NDI receiver initialized" << std::endl;
-        // Try to connect to first available source
-        if (!ndiReceiver.connect()) {
-          std::cout << "No NDI sources found or failed to connect" << std::endl;
-        } else {
-          std::cout << "Connected to NDI source" << std::endl;
-        }
-      }
+    // Load and compile shaders
+    std::string shaderPath = "shaders/";
+    std::ifstream testFile(shaderPath + "standard.vert");
+    if (!testFile.is_open()) {
+      shaderPath = "../shaders/";
     }
+    testFile.close();
+    
+    std::ifstream vertFile(shaderPath + "standard.vert");
+    std::ifstream fragFile(shaderPath + "julia.frag");
+    if (!vertFile.is_open() || !fragFile.is_open()) {
+      std::cerr << "Failed to open shader files" << std::endl;
+      quit();
+    }
+    std::stringstream vertStream, fragStream;
+    vertStream << vertFile.rdbuf();
+    fragStream << fragFile.rdbuf();
+    std::string vertSource = vertStream.str();
+    std::string fragSource = fragStream.str();
+    
+    if (!shaderProgram.compile(vertSource, fragSource)) {
+      std::cerr << "Failed to compile shaders" << std::endl;
+      shaderProgram.printLog();
+      quit();
+    } else {
+      std::cout << "Shaders compiled successfully" << std::endl;
+    }
+
+    // Create a quad mesh for rendering the shader
+    al::addTexQuad(quadMesh);
+    quadMesh.update();
 
     // Set up FBO for primary to render animated texture
     if (isPrimary()) {
@@ -104,29 +128,38 @@ struct MyApp: public al::DistributedAppWithState<SharedState> {
       }
       state().rotationAngle += 0.02f;
       state().frameCount++;
-      state().time += dt; // Update time for animation
+      state().time += dt * 0.2f; // Slow down time to 20%
       
-      // Update shader parameters (kept for compatibility)
+      // Update shader parameters
       state().onset = sin(state().time * 0.5f) * 0.5f + 0.5f;
       state().cent = cos(state().time * 0.3f) * 0.5f + 0.5f;
       state().flux = sin(state().time * 0.7f) * 0.5f + 0.5f;
 
-      // Update texture with NDI video
-      if (ndiReceiver.update(renderTexture)) {
-        // Update state dimensions to match the texture
-        state().textureWidth = renderTexture.width();
-        state().textureHeight = renderTexture.height();
-        
-        // Read texture data from GPU to CPU for transmission
-        renderTexture.bind();
-        glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_UNSIGNED_BYTE, state().textureData);
-        renderTexture.unbind();
-        
-        state().textureLoaded = true;
-        std::cout << "Primary received NDI frame " << state().frameCount << " (" 
-                  << state().textureWidth << "x" << state().textureHeight 
-                  << ") and prepared for transmission" << std::endl;
-      }
+      // Render shader to texture
+      fbo.bind();
+      glViewport(0, 0, state().textureWidth, state().textureHeight);
+      glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+      
+      graphics().pushMatrix();
+      graphics().camera(al::Viewpoint::IDENTITY);
+      graphics().shader(shaderProgram);
+      shaderProgram.uniform("u_time", state().time);
+      shaderProgram.uniform("onset", state().onset);
+      shaderProgram.uniform("cent", state().cent);
+      shaderProgram.uniform("flux", state().flux);
+      
+      graphics().draw(quadMesh);
+      graphics().popMatrix();
+      fbo.unbind();
+      fbo.unbind();
+      
+      // Read texture data from GPU to CPU for transmission
+      renderTexture.bind();
+      glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_UNSIGNED_BYTE, state().textureData);
+      renderTexture.unbind();
+      
+      state().textureLoaded = true;
+      std::cout << "Primary rendered shader frame " << state().frameCount << " and prepared for transmission" << std::endl;
     }
     // Replicas automatically receive the updated state
   } 
@@ -188,7 +221,7 @@ struct MyApp: public al::DistributedAppWithState<SharedState> {
       float sample = sinf(phase) * 0.1f;
       phase += M_2PI * freq / sampleRate;
       if (phase > M_2PI) phase -= M_2PI;
-      io.out(0) = io.out(1) = sample;
+      // io.out(0) = io.out(1) = sample;
     }
   }
 
